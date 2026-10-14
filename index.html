@@ -16,51 +16,28 @@
     .offline { background-color: #f8d7da; color: #842029; }
     label { font-weight: 600; font-size: 0.9rem; color: #495057; display: block; margin-top: 12px; }
     input { width: 100%; padding: 12px; margin-top: 6px; border: 1px solid #ced4da; border-radius: 6px; font-size: 1rem; }
+    input[readonly] { background-color: #e9ecef; color: #495057; cursor: not-allowed; }
     button { width: 100%; background-color: #0d6efd; color: white; border: none; padding: 14px; border-radius: 6px; font-size: 1rem; font-weight: bold; margin-top: 20px; cursor: pointer; }
     button:active { background-color: #0b5ed7; }
     .pending-count { font-size: 0.8rem; text-align: center; margin-top: 10px; color: #6c757d; }
+    .auth-box { margin-bottom: 15px; padding: 10px; border: 1px dashed #ced4da; border-radius: 8px; text-align: center; }
   </style>
-<!-- Cargar librería de Google Identity -->
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 
-<div id="buttonDiv"></div>
-<p>Usuario detectado: <strong id="correoConfirmado">No autenticado</strong></p>
-
-<script>
-  function handleCredentialResponse(response) {
-    // Decodifica el token seguro enviado por Google
-    const responsePayload = jwt_decode(response.credential);
-    const correoDetectado = responsePayload.email;
-    
-    // Guardar en la app para uso offline futuro
-    localStorage.setItem('correo_corporativo', correoDetectado);
-    document.getElementById('correoConfirmado').textContent = correoDetectado;
-  }
-
-  window.onload = function () {
-    // Cargar correo guardado previamente si ya inició sesión antes
-    const correoGuardado = localStorage.getItem('correo_corporativo');
-    if (correoGuardado) {
-      document.getElementById('correoConfirmado').textContent = correoGuardado;
-    } else {
-      // Inicializar botón de inicio de sesión de Google
-      google.accounts.id.initialize({
-        client_id: "TU_CLIENT_ID_DE_GOOGLE.apps.googleusercontent.com",
-        callback: handleCredentialResponse
-      });
-      google.accounts.id.renderButton(
-        document.getElementById("buttonDiv"),
-        { theme: "outline", size: "large" }
-      );
-    }
-  }
-</script>
+  <!-- 1. Cargar Librerías necesarias (Google Identity + Decodificador JWT) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/jwt-decode@3.1.2/build/jwt-decode.min.js"></script>
 </head>
 <body>
 
   <div class="card">
     <h2>Marcación de Asistencia</h2>
     <div id="indicadorRed" class="badge online">Verificando conexión...</div>
+
+    <!-- Contenedor del Botón de Google -->
+    <div id="authSection" class="auth-box">
+      <div id="buttonDiv"></div>
+      <p id="msgAuth" style="font-size: 0.85rem; margin: 5px 0 0 0; color: #6c757d;">Inicia sesión para validar tu correo</p>
+    </div>
 
     <form id="formAsistencia">
       <label for="correo">Correo Corporativo:</label>
@@ -76,17 +53,67 @@
   </div>
 
   <script>
-    // ⚠️ REEMPLAZA ESTA URL CON LA QUE TE DIO GOOGLE APPS SCRIPT
     const URL_APPS_SCRIPT = 'https://script.google.com/a/macros/transener.com.ar/s/AKfycbx5aGj5RIydW27A4OwsS7Efzpd7CtGazGb2VBm_jzqphP67TlylUgeZuot_6ONX9gmG/exec';
+    
+    // ⚠️ CLIENT ID DE GOOGLE IDENTITY (Opcional: puedes reemplazarlo con el Client ID de tu consola GCP)
+    const GOOGLE_CLIENT_ID = '317134301594-8t721m25964860228782012012.apps.googleusercontent.com';
 
-    // Registrar Service Worker
+    // --- LÓGICA DE DETECCIÓN Y AUTENTICACIÓN DE CORREO ---
+    function aplicarCorreoConfirmado(correo) {
+      const inputCorreo = document.getElementById('correo');
+      inputCorreo.value = correo.toLowerCase().trim();
+      inputCorreo.readOnly = true; // Bloquea la edición para evitar fraudes
+
+      // Ocultar sección de login
+      document.getElementById('authSection').style.display = 'none';
+      localStorage.setItem('correo_corporativo', correo.toLowerCase().trim());
+    }
+
+    function handleCredentialResponse(response) {
+      try {
+        const responsePayload = jwt_decode(response.credential);
+        const correoDetectado = responsePayload.email;
+        aplicarCorreoConfirmado(correoDetectado);
+      } catch (e) {
+        console.error("Error al decodificar token de Google:", e);
+      }
+    }
+
+    // Comprobar fuentes de correo al iniciar la app
+    window.addEventListener('DOMContentLoaded', () => {
+      // 1. Ver si viene por parámetro URL (?email=usuario@empresa.com)
+      const urlParams = new URLSearchParams(window.location.search);
+      const emailURL = urlParams.get('email');
+
+      // 2. Ver si ya estaba guardado en la memoria del celular
+      const correoGuardado = localStorage.getItem('correo_corporativo');
+
+      if (emailURL) {
+        aplicarCorreoConfirmado(emailURL);
+      } else if (correoGuardado) {
+        aplicarCorreoConfirmado(correoGuardado);
+      } else {
+        // 3. Inicializar botón de Google si hay conexión
+        if (typeof google !== 'undefined' && google.accounts) {
+          google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: handleCredentialResponse
+          });
+          google.accounts.id.renderButton(
+            document.getElementById("buttonDiv"),
+            { theme: "outline", size: "medium" }
+          );
+        }
+      }
+    });
+
+    // --- LÓGICA SERVICE WORKER Y RED ---
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js')
         .then(() => console.log('Service Worker registrado'))
         .catch(err => console.error('Error SW:', err));
     }
 
-    // Monitoreo de estado de Red
     function actualizarEstadoRed() {
       const ind = document.getElementById('indicadorRed');
       if (navigator.onLine) {
@@ -103,18 +130,17 @@
     window.addEventListener('online', actualizarEstadoRed);
     window.addEventListener('offline', actualizarEstadoRed);
 
-    // Guardado de formulario
+    // --- REGISTRO DE FORMULARIO ---
     document.getElementById('formAsistencia').addEventListener('submit', function(e) {
       e.preventDefault();
       
       const registro = {
         correo: document.getElementById('correo').value.trim().toLowerCase(),
         codigo: document.getElementById('codigo').value.trim().toUpperCase(),
-        fechaHoraLocal: new Date().toLocaleString('es-AR'), // Ajusta tu configuración regional
+        fechaHoraLocal: new Date().toLocaleString('es-AR'),
         gps: "Sin GPS"
       };
 
-      // Captura GPS si está disponible
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           pos => {
@@ -143,13 +169,12 @@
       localStorage.setItem('asistencias_offline', JSON.stringify(pendientes));
       
       alert("✅ Guardado en la memoria del teléfono.\nSe enviará automáticamente a Google Sheets al recuperar señal.");
-      document.getElementById('formAsistencia').reset();
+      document.getElementById('codigo').value = ''; // Limpia solo el código, mantiene el correo
       actualizarConteoPendientes();
     }
 
     async function enviarAlServidor(datos) {
       try {
-        // Usa mode: 'no-cors' para evitar bloqueos por políticas de origen cruzado de Google
         await fetch(URL_APPS_SCRIPT, {
           method: 'POST',
           mode: 'no-cors',
@@ -158,7 +183,7 @@
         });
 
         alert("✅ ¡Asistencia enviada a Google Sheets correctamente!");
-        document.getElementById('formAsistencia').reset();
+        document.getElementById('codigo').value = ''; // Limpia solo el código
       } catch (err) {
         console.error(err);
         alert("Error de red al enviar. Guardando en memoria local...");
@@ -186,7 +211,6 @@
         : '';
     }
 
-    // Ejecutar al cargar la página
     actualizarEstadoRed();
   </script>
 </body>

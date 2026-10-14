@@ -9,62 +9,157 @@
   <style>
     * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
     body { background-color: #f4f6f8; margin: 0; padding: 20px; display: flex; justify-content: center; }
-    .card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+    .card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 420px; }
     h2 { margin-top: 0; color: #1a252c; font-size: 1.4rem; text-align: center; }
     .badge { padding: 8px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; text-align: center; margin-bottom: 20px; }
     .online { background-color: #d1e7dd; color: #0f5132; }
     .offline { background-color: #f8d7da; color: #842029; }
     label { font-weight: 600; font-size: 0.9rem; color: #495057; display: block; margin-top: 12px; }
-    input { width: 100%; padding: 12px; margin-top: 6px; border: 1px solid #ced4da; border-radius: 6px; font-size: 1rem; }
+    input, select { width: 100%; padding: 12px; margin-top: 6px; border: 1px solid #ced4da; border-radius: 6px; font-size: 1rem; }
     input[readonly] { background-color: #e9ecef; color: #495057; cursor: not-allowed; }
-    button { width: 100%; background-color: #0d6efd; color: white; border: none; padding: 14px; border-radius: 6px; font-size: 1rem; font-weight: bold; margin-top: 20px; cursor: pointer; }
-    button:active { background-color: #0b5ed7; }
-    .pending-count { font-size: 0.8rem; text-align: center; margin-top: 10px; color: #6c757d; }
+    
+    /* Botones y Selector de Rol */
+    .btn { width: 100%; background-color: #0d6efd; color: white; border: none; padding: 14px; border-radius: 6px; font-size: 1rem; font-weight: bold; margin-top: 15px; cursor: pointer; text-align: center; display: block; }
+    .btn-secondary { background-color: #6c757d; }
+    .btn-outline { background-color: transparent; color: #0d6efd; border: 2px solid #0d6efd; }
+    .btn:active { opacity: 0.85; }
+    
+    .role-selection { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+    .role-btn { padding: 20px; border-radius: 8px; border: 2px solid #0d6efd; background: #f8f9fa; color: #0d6efd; font-size: 1.1rem; font-weight: bold; cursor: pointer; text-align: center; }
+    .role-btn:hover { background: #e7f1ff; }
+
+    /* Código en pantalla gigante para Formador */
+    .pin-display { font-size: 2.8rem; font-weight: 900; letter-spacing: 4px; color: #0d6efd; text-align: center; background: #e7f1ff; padding: 15px; border-radius: 8px; margin: 15px 0; border: 2px dashed #0d6efd; }
+    
+    .pending-count { font-size: 0.8rem; text-align: center; margin-top: 15px; color: #6c757d; }
     .auth-box { margin-bottom: 15px; padding: 10px; border: 1px dashed #ced4da; border-radius: 8px; text-align: center; }
+    .hidden { display: none !important; }
+    .nav-back { color: #0d6efd; text-decoration: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: inline-block; margin-bottom: 15px; }
   </style>
 
-  <!-- 1. Cargar Librerías necesarias (Google Identity + Decodificador JWT) -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/jwt-decode@3.1.2/build/jwt-decode.min.js"></script>
 </head>
 <body>
 
   <div class="card">
-    <h2>Marcación de Asistencia</h2>
     <div id="indicadorRed" class="badge online">Verificando conexión...</div>
 
-    <!-- Contenedor del Botón de Google -->
-    <div id="authSection" class="auth-box">
-      <div id="buttonDiv"></div>
-      <p id="msgAuth" style="font-size: 0.85rem; margin: 5px 0 0 0; color: #6c757d;">Inicia sesión para validar tu correo</p>
+    <!-- ========================================== -->
+    <!-- VISTA 0: SELECTOR INICIAL DE ROL          -->
+    <!-- ========================================== -->
+    <div id="viewSelector">
+      <h2>Asistencia Capacitaciones</h2>
+      <p style="text-align: center; color: #6c757d; font-size: 0.95rem;">Selecciona tu perfil para continuar:</p>
+      
+      <div class="role-selection">
+        <button class="role-btn" onclick="mostrarVista('viewFormador')">👨‍🏫 Soy Formador<br><span style="font-size: 0.8rem; font-weight: normal; color: #495057;">Crear clase / Generar código PIN</span></button>
+        <button class="role-btn" onclick="mostrarVista('viewAsistente')">🙋‍♂️ Soy Asistente<br><span style="font-size: 0.8rem; font-weight: normal; color: #495057;">Dar asistencia con el código</span></button>
+      </div>
     </div>
 
-    <form id="formAsistencia">
-      <label for="correo">Correo Corporativo:</label>
-      <input type="email" id="correo" required placeholder="nombre@empresa.com">
+    <!-- ========================================== -->
+    <!-- VISTA 1: CREAR CAPACITACIÓN (FORMADOR)     -->
+    <!-- ========================================== -->
+    <div id="viewFormador" class="hidden">
+      <span class="nav-back" onclick="mostrarVista('viewSelector')">← Volver al inicio</span>
+      <h2>Crear Nueva Capacitación</h2>
 
-      <label for="codigo">Código de Capacitación:</label>
-      <input type="text" id="codigo" required placeholder="Ej: 8492 o MED-1484" style="text-transform:uppercase">
+      <form id="formCrearCapacitacion">
+        <label for="nombreCapacitacion">Nombre de la Capacitación:</label>
+        <input type="text" id="nombreCapacitacion" required placeholder="Ej: Mediciones de Tiempo">
 
-      <button type="submit" id="btnGuardar">Registrar Asistencia</button>
-    </form>
+        <button type="submit" class="btn">Generar Código de Asistencia</button>
+      </form>
 
-    <div id="pendientesInfo" class="pending-count"></div>
+      <!-- Resultado con el Código generado -->
+      <div id="resultadoCodigo" class="hidden">
+        <p style="text-align: center; margin-bottom: 0; font-weight: 600;">Código generado para la clase:</p>
+        <div id="pinGenerado" class="pin-display">----</div>
+        <p style="text-align: center; font-size: 0.85rem; color: #6c757d;">Muestra o dicta este código a los alumnos en el aula para que registren su asistencia.</p>
+        <button type="button" class="btn btn-outline" onclick="reiniciarFormador()">Crear Otra Capacitación</button>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VISTA 2: DAR ASISTENCIA (ASISTENTE)       -->
+    <!-- ========================================== -->
+    <div id="viewAsistente" class="hidden">
+      <span class="nav-back" onclick="mostrarVista('viewSelector')">← Volver al inicio</span>
+      <h2>Marcación de Asistencia</h2>
+
+      <!-- Autenticación Google si no se detectó correo -->
+      <div id="authSection" class="auth-box">
+        <div id="buttonDiv"></div>
+        <p id="msgAuth" style="font-size: 0.85rem; margin: 5px 0 0 0; color: #6c757d;">Inicia sesión para validar tu correo</p>
+      </div>
+
+      <form id="formAsistencia">
+        <label for="correo">Correo Corporativo:</label>
+        <input type="email" id="correo" required placeholder="nombre@empresa.com">
+
+        <label for="codigo">Código Dictado por Formador:</label>
+        <input type="text" id="codigo" required placeholder="Ej: 8492" style="text-transform:uppercase">
+
+        <button type="submit" id="btnGuardar" class="btn">Registrar Asistencia</button>
+      </form>
+
+      <div id="pendientesInfo" class="pending-count"></div>
+    </div>
+
   </div>
 
   <script>
     const URL_APPS_SCRIPT = 'https://script.google.com/a/macros/transener.com.ar/s/AKfycbx5aGj5RIydW27A4OwsS7Efzpd7CtGazGb2VBm_jzqphP67TlylUgeZuot_6ONX9gmG/exec';
-    
-    // ⚠️ CLIENT ID DE GOOGLE IDENTITY (Opcional: puedes reemplazarlo con el Client ID de tu consola GCP)
     const GOOGLE_CLIENT_ID = '317134301594-8t721m25964860228782012012.apps.googleusercontent.com';
 
-    // --- LÓGICA DE DETECCIÓN Y AUTENTICACIÓN DE CORREO ---
+    // --- NAVEGACIÓN ENTRE VISTAS ---
+    function mostrarVista(vistaId) {
+      document.getElementById('viewSelector').classList.add('hidden');
+      document.getElementById('viewFormador').classList.add('hidden');
+      document.getElementById('viewAsistente').classList.add('hidden');
+
+      document.getElementById(vistaId).classList.remove('hidden');
+    }
+
+    // --- LÓGICA FORMADOR (CREAR CAPACITACIÓN) ---
+    document.getElementById('formCrearCapacitacion').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const nombre = document.getElementById('nombreCapacitacion').value.trim();
+      
+      // Genera PIN aleatorio de 4 dígitos (ej: 8492)
+      const pin = Math.floor(1000 + Math.random() * 9000).toString();
+      
+      document.getElementById('pinGenerado').textContent = pin;
+      document.getElementById('formCrearCapacitacion').classList.add('hidden');
+      document.getElementById('resultadoCodigo').classList.remove('hidden');
+
+      // Guardar el registro de la creación de la capacitación
+      const sesionCapacitacion = {
+        tipo: "CREACION_CAPACITACION",
+        nombre: nombre,
+        codigo: pin,
+        fechaHoraLocal: new Date().toLocaleString('es-AR')
+      };
+
+      if (navigator.onLine) {
+        enviarAlServidor([sesionCapacitacion]);
+      } else {
+        guardarLocalmente(sesionCapacitacion);
+      }
+    });
+
+    function reiniciarFormador() {
+      document.getElementById('formCrearCapacitacion').reset();
+      document.getElementById('formCrearCapacitacion').classList.remove('hidden');
+      document.getElementById('resultadoCodigo').classList.add('hidden');
+    }
+
+    // --- LÓGICA ASISTENTE Y AUTENTICACIÓN ---
     function aplicarCorreoConfirmado(correo) {
       const inputCorreo = document.getElementById('correo');
       inputCorreo.value = correo.toLowerCase().trim();
-      inputCorreo.readOnly = true; // Bloquea la edición para evitar fraudes
-
-      // Ocultar sección de login
+      inputCorreo.readOnly = true;
       document.getElementById('authSection').style.display = 'none';
       localStorage.setItem('correo_corporativo', correo.toLowerCase().trim());
     }
@@ -72,20 +167,15 @@
     function handleCredentialResponse(response) {
       try {
         const responsePayload = jwt_decode(response.credential);
-        const correoDetectado = responsePayload.email;
-        aplicarCorreoConfirmado(correoDetectado);
+        aplicarCorreoConfirmado(responsePayload.email);
       } catch (e) {
-        console.error("Error al decodificar token de Google:", e);
+        console.error("Error al decodificar token:", e);
       }
     }
 
-    // Comprobar fuentes de correo al iniciar la app
     window.addEventListener('DOMContentLoaded', () => {
-      // 1. Ver si viene por parámetro URL (?email=usuario@empresa.com)
       const urlParams = new URLSearchParams(window.location.search);
       const emailURL = urlParams.get('email');
-
-      // 2. Ver si ya estaba guardado en la memoria del celular
       const correoGuardado = localStorage.getItem('correo_corporativo');
 
       if (emailURL) {
@@ -93,7 +183,6 @@
       } else if (correoGuardado) {
         aplicarCorreoConfirmado(correoGuardado);
       } else {
-        // 3. Inicializar botón de Google si hay conexión
         if (typeof google !== 'undefined' && google.accounts) {
           google.accounts.id.initialize({
             client_id: GOOGLE_CLIENT_ID,
@@ -107,7 +196,7 @@
       }
     });
 
-    // --- LÓGICA SERVICE WORKER Y RED ---
+    // --- SERVICE WORKER Y CONEXIÓN RED ---
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js')
         .then(() => console.log('Service Worker registrado'))
@@ -130,11 +219,12 @@
     window.addEventListener('online', actualizarEstadoRed);
     window.addEventListener('offline', actualizarEstadoRed);
 
-    // --- REGISTRO DE FORMULARIO ---
+    // --- ENVÍO DE FORMULARIO DE ASISTENCIA ---
     document.getElementById('formAsistencia').addEventListener('submit', function(e) {
       e.preventDefault();
       
       const registro = {
+        tipo: "MARCACION_ASISTENCIA",
         correo: document.getElementById('correo').value.trim().toLowerCase(),
         codigo: document.getElementById('codigo').value.trim().toUpperCase(),
         fechaHoraLocal: new Date().toLocaleString('es-AR'),
@@ -168,8 +258,8 @@
       pendientes.push(registro);
       localStorage.setItem('asistencias_offline', JSON.stringify(pendientes));
       
-      alert("✅ Guardado en la memoria del teléfono.\nSe enviará automáticamente a Google Sheets al recuperar señal.");
-      document.getElementById('codigo').value = ''; // Limpia solo el código, mantiene el correo
+      alert("✅ Guardado en el teléfono.\nSe sincronizará con Google Sheets al recuperar conexión.");
+      if (document.getElementById('codigo')) document.getElementById('codigo').value = '';
       actualizarConteoPendientes();
     }
 
@@ -182,11 +272,11 @@
           body: JSON.stringify(datos)
         });
 
-        alert("✅ ¡Asistencia enviada a Google Sheets correctamente!");
-        document.getElementById('codigo').value = ''; // Limpia solo el código
+        alert("✅ Registrado con éxito en Google Sheets");
+        if (document.getElementById('codigo')) document.getElementById('codigo').value = '';
       } catch (err) {
         console.error(err);
-        alert("Error de red al enviar. Guardando en memoria local...");
+        alert("Sin conexión directa. Guardando localmente...");
         guardarLocalmente(datos[0]);
       }
     }
@@ -197,7 +287,7 @@
         enviarAlServidor(pendientes);
         localStorage.removeItem('asistencias_offline');
         setTimeout(() => {
-          alert(`🔄 Se sincronizaron automáticamente ${pendientes.length} registros guardados previamente sin señal.`);
+          alert(`🔄 Se sincronizaron ${pendientes.length} registros pendientes guardados en el campo.`);
           actualizarConteoPendientes();
         }, 1000);
       }

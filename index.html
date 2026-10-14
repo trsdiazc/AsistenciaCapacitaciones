@@ -20,6 +20,41 @@
     button:active { background-color: #0b5ed7; }
     .pending-count { font-size: 0.8rem; text-align: center; margin-top: 10px; color: #6c757d; }
   </style>
+<!-- Cargar librería de Google Identity -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<div id="buttonDiv"></div>
+<p>Usuario detectado: <strong id="correoConfirmado">No autenticado</strong></p>
+
+<script>
+  function handleCredentialResponse(response) {
+    // Decodifica el token seguro enviado por Google
+    const responsePayload = jwt_decode(response.credential);
+    const correoDetectado = responsePayload.email;
+    
+    // Guardar en la app para uso offline futuro
+    localStorage.setItem('correo_corporativo', correoDetectado);
+    document.getElementById('correoConfirmado').textContent = correoDetectado;
+  }
+
+  window.onload = function () {
+    // Cargar correo guardado previamente si ya inició sesión antes
+    const correoGuardado = localStorage.getItem('correo_corporativo');
+    if (correoGuardado) {
+      document.getElementById('correoConfirmado').textContent = correoGuardado;
+    } else {
+      // Inicializar botón de inicio de sesión de Google
+      google.accounts.id.initialize({
+        client_id: "TU_CLIENT_ID_DE_GOOGLE.apps.googleusercontent.com",
+        callback: handleCredentialResponse
+      });
+      google.accounts.id.renderButton(
+        document.getElementById("buttonDiv"),
+        { theme: "outline", size: "large" }
+      );
+    }
+  }
+</script>
 </head>
 <body>
 

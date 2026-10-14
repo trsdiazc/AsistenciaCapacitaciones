@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asistencia Capacitaciones</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0d6efd">
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { background-color: #f4f6f8; margin: 0; padding: 20px; display: flex; justify-content: center; }
+    .card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+    h2 { margin-top: 0; color: #1a252c; font-size: 1.4rem; text-align: center; }
+    .badge { padding: 8px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; text-align: center; margin-bottom: 20px; }
+    .online { background-color: #d1e7dd; color: #0f5132; }
+    .offline { background-color: #f8d7da; color: #842029; }
+    label { font-weight: 600; font-size: 0.9rem; color: #495057; display: block; margin-top: 12px; }
+    input { width: 100%; padding: 12px; margin-top: 6px; border: 1px solid #ced4da; border-radius: 6px; font-size: 1rem; }
+    button { width: 100%; background-color: #0d6efd; color: white; border: none; padding: 14px; border-radius: 6px; font-size: 1rem; font-weight: bold; margin-top: 20px; cursor: pointer; }
+    button:active { background-color: #0b5ed7; }
+    .pending-count { font-size: 0.8rem; text-align: center; margin-top: 10px; color: #6c757d; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Marcación de Asistencia</h2>
+    <div id="indicadorRed" class="badge online">Verificando conexión...</div>
+
+    <form id="formAsistencia">
+      <label for="correo">Correo Corporativo:</label>
+      <input type="email" id="correo" required placeholder="nombre@empresa.com">
+
+      <label for="codigo">Código de Capacitación:</label>
+      <input type="text" id="codigo" required placeholder="Ej: 8492 o MED-1484" style="text-transform:uppercase">
+
+      <button type="submit" id="btnGuardar">Registrar Asistencia</button>
+    </form>
+
+    <div id="pendientesInfo" class="pending-count"></div>
+  </div>
+
+  <script>
+    // ⚠️ REEMPLAZA ESTA URL CON LA QUE TE DIO GOOGLE APPS SCRIPT
+    const URL_APPS_SCRIPT = 'https://script.google.com/a/macros/transener.com.ar/s/AKfycbx5aGj5RIydW27A4OwsS7Efzpd7CtGazGb2VBm_jzqphP67TlylUgeZuot_6ONX9gmG/exec';
+
+    // Registrar Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js')
+        .then(() => console.log('Service Worker registrado'))
+        .catch(err => console.error('Error SW:', err));
+    }
+
+    // Monitoreo de estado de Red
+    function actualizarEstadoRed() {
+      const ind = document.getElementById('indicadorRed');
+      if (navigator.onLine) {
+        ind.textContent = "● Conectado a Internet";
+        ind.className = "badge online";
+        sincronizarPendientes();
+      } else {
+        ind.textContent = "● Modo Offline (Sin Red)";
+        ind.className = "badge offline";
+      }
+      actualizarConteoPendientes();
+    }
+
+    window.addEventListener('online', actualizarEstadoRed);
+    window.addEventListener('offline', actualizarEstadoRed);
+
+    // Guardado de formulario
+    document.getElementById('formAsistencia').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const registro = {
+        correo: document.getElementById('correo').value.trim().toLowerCase(),
+        codigo: document.getElementById('codigo').value.trim().toUpperCase(),
+        fechaHoraLocal: new Date().toLocaleString('es-AR'), // Ajusta tu configuración regional
+        gps: "Sin GPS"
+      };
+
+      // Captura GPS si está disponible
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            registro.gps = `${pos.coords.latitude.toFixed(5)},${pos.coords.longitude.toFixed(5)}`;
+            procesarRegistro(registro);
+          },
+          err => { procesarRegistro(registro); },
+          { timeout: 3000 }
+        );
+      } else {
+        procesarRegistro(registro);
+      }
+    });
+
+    function procesarRegistro(registro) {
+      if (navigator.onLine) {
+        enviarAlServidor([registro]);
+      } else {
+        guardarLocalmente(registro);
+      }
+    }
+
+    function guardarLocalmente(registro) {
+      let pendientes = JSON.parse(localStorage.getItem('asistencias_offline') || '[]');
+      pendientes.push(registro);
+      localStorage.setItem('asistencias_offline', JSON.stringify(pendientes));
+      
+      alert("✅ Guardado en la memoria del teléfono.\nSe enviará automáticamente a Google Sheets al recuperar señal.");
+      document.getElementById('formAsistencia').reset();
+      actualizarConteoPendientes();
+    }
+
+    async function enviarAlServidor(datos) {
+      try {
+        // Usa mode: 'no-cors' para evitar bloqueos por políticas de origen cruzado de Google
+        await fetch(URL_APPS_SCRIPT, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(datos)
+        });
+
+        alert("✅ ¡Asistencia enviada a Google Sheets correctamente!");
+        document.getElementById('formAsistencia').reset();
+      } catch (err) {
+        console.error(err);
+        alert("Error de red al enviar. Guardando en memoria local...");
+        guardarLocalmente(datos[0]);
+      }
+    }
+
+    function sincronizarPendientes() {
+      let pendientes = JSON.parse(localStorage.getItem('asistencias_offline') || '[]');
+      if (pendientes.length > 0) {
+        enviarAlServidor(pendientes);
+        localStorage.removeItem('asistencias_offline');
+        setTimeout(() => {
+          alert(`🔄 Se sincronizaron automáticamente ${pendientes.length} registros guardados previamente sin señal.`);
+          actualizarConteoPendientes();
+        }, 1000);
+      }
+    }
+
+    function actualizarConteoPendientes() {
+      let pendientes = JSON.parse(localStorage.getItem('asistencias_offline') || '[]');
+      const div = document.getElementById('pendientesInfo');
+      div.textContent = pendientes.length > 0 
+        ? `📌 Registros pendientes por enviar: ${pendientes.length}` 
+        : '';
+    }
+
+    // Ejecutar al cargar la página
+    actualizarEstadoRed();
+  </script>
+</body>
+</html>
